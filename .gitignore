@@ -1,0 +1,18 @@
+# 실제 개인 원문 데이터
+data/
+
+# 파이썬/테스트/도구 캐시
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+chroma/
+
+# 로컬 환경과 비밀값
+.venv/
+venv/
+.env
+.env.*
+.streamlit/secrets.toml

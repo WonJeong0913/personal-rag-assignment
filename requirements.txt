@@ -1,0 +1,10 @@
+streamlit>=1.42,<2
+langchain-core>=1.0,<2
+langchain-chroma>=1.0,<2
+langchain-huggingface>=1.0,<2
+langchain-text-splitters>=1.0,<2
+langchain-google-genai>=4.0,<5
+chromadb>=1.0,<2
+sentence-transformers>=3.0,<6
+pypdf>=5.0,<7
+pytest>=8.0,<10
