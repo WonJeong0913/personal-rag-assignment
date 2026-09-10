@@ -20,7 +20,7 @@ from rag_core import (
     load_documents_from_text,
     ollama_model_available,
     retrieve_documents,
-    source_label,
+    strip_display_source_citations,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -93,12 +93,6 @@ def _ensure_rag_session() -> RagSession:
     return session
 
 
-def _show_sources(documents: list) -> None:
-    for number, document in enumerate(documents, 1):
-        with st.expander(f"출처 {number}: {source_label(document)}"):
-            st.text(document.page_content)
-
-
 def _history() -> list[dict[str, Any]]:
     history = st.session_state.get(HISTORY_KEY)
     if not isinstance(history, list):
@@ -112,8 +106,7 @@ def _render_history() -> None:
         with st.chat_message("user"):
             st.write(turn["question"])
         with st.chat_message("assistant"):
-            st.write(turn["answer"])
-            _show_sources(turn["sources"])
+            st.write(strip_display_source_citations(str(turn["answer"])))
 
 
 def _generate_answer(backend: str, question: str, sources: list, api_key: str) -> str:
@@ -127,15 +120,15 @@ def _generate_answer(backend: str, question: str, sources: list, api_key: str) -
 
 
 def main() -> None:
-    st.set_page_config(page_title="개인 프로필 RAG", page_icon="👤")
+    st.set_page_config(page_title="나만의 맞춤형 Chatbot", page_icon="👤")
     deployment_mode = _has_profile_secret()
     api_key = _secret_text("GOOGLE_API_KEY")
     if deployment_mode and not api_key:
-        st.title("개인 프로필 RAG")
+        st.title("나만의 맞춤형 Chatbot")
         st.error("배포 답변 설정을 확인해 주세요.")
         return
-    st.title("개인 프로필 RAG")
-    st.caption("질문에 답할 때 제공된 자료와 출처만 사용합니다.")
+    st.title("나만의 맞춤형 Chatbot")
+    st.caption("제공된 자료를 바탕으로 답합니다.")
 
     with st.sidebar:
         backend = "Gemini" if api_key else "Ollama (로컬)"
@@ -155,10 +148,11 @@ def main() -> None:
             session = _ensure_rag_session()
             sources = retrieve_documents(session, question)
             with st.spinner("답변을 준비하는 중입니다..."):
-                answer = _generate_answer(backend, question, sources, api_key)
+                answer = strip_display_source_citations(
+                    _generate_answer(backend, question, sources, api_key)
+                )
             st.write(answer)
-            _show_sources(sources)
-            _history().append({"question": question, "answer": answer, "sources": sources})
+            _history().append({"question": question, "answer": answer})
         except Exception as exc:
             # 예외 상세에는 원문 또는 provider 정보가 포함될 수 있으므로 표시하지 않는다.
             LOGGER.warning("personal_rag_request_failed type=%s", type(exc).__name__)

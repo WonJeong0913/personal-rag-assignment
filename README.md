@@ -48,7 +48,7 @@ GOOGLE_API_KEY = "Gemini API key"
 
 - `PROFILE_DATA`를 설정하면 Cloud는 로컬 `data/` 파일 없이 같은 입력 형식을 사용합니다.
 - `GOOGLE_API_KEY`가 있으면 앱은 Gemini를 자동으로 사용하며, 사용자는 키나 엔진을 고르지 않고 질문만 합니다. 이 경우 질문과 검색된 문맥이 Google API에 전송됩니다.
-- 이 배포는 비밀번호 없이 열립니다. 링크에 접근한 사람은 제공된 프로필에 관한 질문과 출처를 조회할 수 있으므로, 공개 범위에 맞는 입력만 `PROFILE_DATA`에 설정하세요.
+- 이 배포는 비밀번호 없이 열립니다. 링크에 접근한 사람은 제공된 프로필에 관한 답변을 조회할 수 있으므로, 공개 범위에 맞는 입력만 `PROFILE_DATA`에 설정하세요.
 
 Cloud 플랫폼용 `.streamlit/config.toml`에는 bind address를 고정하지 않았습니다. 로컬 주소 고정은 위의 실행 명령에서만 합니다.
 

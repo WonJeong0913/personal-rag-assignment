@@ -166,7 +166,14 @@ def test_unprovided_information_is_explicit_in_generation_prompt() -> None:
     assert rag_core.explicitly_unprovided_question("대상자의 졸업 연도는 언제인가요?")
     assert rag_core.ABSTENTION_TEXT in messages[0].content
     assert "가족의 이름이나 관계" in messages[0].content
+    assert "[출처 번호]" not in messages[0].content
     assert json.loads(messages[1].content)["question"] == "대상자의 졸업 연도는 언제인가요?"
+
+
+def test_display_source_citation_stripping_keeps_other_brackets() -> None:
+    answer = "첫 문장 [출처 1] 다음 문장[출처 1, 4]. [보존할 메모] [출처 알 수 없음]"
+
+    assert rag_core.strip_display_source_citations(answer) == "첫 문장 다음 문장. [보존할 메모] [출처 알 수 없음]"
 
 
 def test_ollama_generation_uses_fixed_loopback_contract(monkeypatch: pytest.MonkeyPatch) -> None:
