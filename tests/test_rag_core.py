@@ -30,11 +30,12 @@ class TinyEmbeddings:
         return self._vector(text)
 
 
-def synthetic_profile() -> str:
-    values = {field: f"synthetic-{number}" for number, field in enumerate(rag_core.CANONICAL_FIELDS, 1)}
-    lines = ["[기준 사실]", *(f"{field}: {values[field]}" for field in rag_core.CANONICAL_FIELDS), "", "[100개 문답]"]
+def synthetic_profile(*, include_optional_fields: bool = True) -> str:
+    fields = rag_core.CANONICAL_FIELDS if include_optional_fields else rag_core.REQUIRED_CANONICAL_FIELDS
+    values = {field: f"synthetic-{number}" for number, field in enumerate(fields, 1)}
+    lines = ["[기준 사실]", *(f"{field}: {values[field]}" for field in fields), "", "[100개 문답]"]
     for number in range(1, 101):
-        field = rag_core.CANONICAL_FIELDS[(number - 1) % len(rag_core.CANONICAL_FIELDS)]
+        field = fields[(number - 1) % len(fields)]
         label = "현재 재학 학교" if field == "현재학교" else field
         lines.extend((
             f"Q{number}. 대상자의 {label} 정보를 알려주세요 {number}.",
@@ -59,6 +60,16 @@ def test_100_unique_qa_and_canonical_facts_stay_in_one_document(parsed_documents
     assert len({document.page_content.splitlines()[0] for document in qa_documents}) == 100
     assert all(document.page_content.startswith("Q") and "\nA" in document.page_content for document in qa_documents)
     assert rag_core.split_profile_documents(parsed_documents) == parsed_documents
+
+
+def test_13_required_field_input_remains_backward_compatible() -> None:
+    documents = rag_core.parse_document_bytes(
+        "synthetic.txt", synthetic_profile(include_optional_fields=False).encode("utf-8")
+    )
+    canonical = [document for document in documents if document.metadata["record_type"] == "canonical"]
+
+    assert len(canonical) == len(rag_core.REQUIRED_CANONICAL_FIELDS)
+    assert {document.metadata["fields"] for document in canonical} == set(rag_core.REQUIRED_CANONICAL_FIELDS)
 
 
 def test_ephemeral_indexes_are_separate_and_disposal_is_scoped(parsed_documents: list) -> None:
@@ -116,7 +127,7 @@ def test_profile_and_school_abbreviation_intents_select_the_right_fields() -> No
     assert rag_core.detect_question_fields("대상자의 학과에 대해 알려주세요.") == ("학과",)
 
 
-def test_full_profile_request_preserves_all_13_canonical_evidence(parsed_documents: list) -> None:
+def test_full_profile_request_preserves_all_15_canonical_evidence(parsed_documents: list) -> None:
     session = rag_core.create_rag_session(parsed_documents, embedding_function=TinyEmbeddings())
     try:
         retrieved = rag_core.retrieve_documents(session, "대상자에 대해 알려주세요.")
@@ -127,14 +138,35 @@ def test_full_profile_request_preserves_all_13_canonical_evidence(parsed_documen
         rag_core.dispose_rag_session(session)
 
 
+def test_birth_and_gender_retrieval_do_not_mix_with_family_subjects(parsed_documents: list) -> None:
+    session = rag_core.create_rag_session(parsed_documents, embedding_function=TinyEmbeddings())
+    try:
+        birth = rag_core.retrieve_documents(session, "대상자의 생일은 언제인가요?")
+        gender = rag_core.retrieve_documents(session, "대상자의 성별을 알려주세요.")
+
+        assert birth[0].metadata["record_type"] == "qa"
+        assert birth[0].metadata["fields"] == "생년월일"
+        assert gender[0].metadata["record_type"] == "qa"
+        assert gender[0].metadata["fields"] == "성별"
+        assert rag_core.detect_question_fields("대상자의 동생 성별은 무엇인가요?") == ("동생",)
+        assert rag_core.detect_question_fields("대상자의 어머니 생일은 언제인가요?") == ("어머니",)
+        assert rag_core.detect_question_fields("본인과 동생의 성별을 알려주세요.") == ("동생", "성별")
+
+        mixed = rag_core.retrieve_documents(session, "본인과 동생의 성별을 알려주세요.", k=2)
+        assert {field for document in mixed for field in document.metadata["fields"].split("|")} == {"동생", "성별"}
+    finally:
+        rag_core.dispose_rag_session(session)
+
+
 def test_unprovided_information_is_explicit_in_generation_prompt() -> None:
     document = rag_core.parse_document_bytes("synthetic.txt", synthetic_profile().encode("utf-8"))[0]
-    messages = rag_core.build_generation_messages("대상자의 생일은 언제인가요?", [document])
+    messages = rag_core.build_generation_messages("대상자의 졸업 연도는 언제인가요?", [document])
 
-    assert rag_core.explicitly_unprovided_question("대상자의 생년월일은 언제인가요?")
+    assert not rag_core.explicitly_unprovided_question("대상자의 생년월일은 언제인가요?")
+    assert rag_core.explicitly_unprovided_question("대상자의 졸업 연도는 언제인가요?")
     assert rag_core.ABSTENTION_TEXT in messages[0].content
-    assert "성별" in messages[0].content
-    assert json.loads(messages[1].content)["question"] == "대상자의 생일은 언제인가요?"
+    assert "가족의 이름이나 관계" in messages[0].content
+    assert json.loads(messages[1].content)["question"] == "대상자의 졸업 연도는 언제인가요?"
 
 
 def test_ollama_generation_uses_fixed_loopback_contract(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -165,8 +197,3 @@ def test_ollama_generation_uses_fixed_loopback_contract(monkeypatch: pytest.Monk
     assert captured["body"]["model"] == rag_core.OLLAMA_MODEL_DEFAULT
     assert captured["body"]["stream"] is False
     assert captured["body"]["options"] == {"temperature": 0, "num_predict": rag_core.OLLAMA_NUM_PREDICT}
-
-
-def test_password_comparison_accepts_korean_text() -> None:
-    assert rag_core.verify_site_password("합성-암호", "합성-암호")
-    assert not rag_core.verify_site_password("합성-암호", "다른-암호")

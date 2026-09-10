@@ -21,14 +21,12 @@ from rag_core import (
     ollama_model_available,
     retrieve_documents,
     source_label,
-    verify_site_password,
 )
 
 LOGGER = logging.getLogger(__name__)
 
 SESSION_KEY = "personal_rag_session"
 HISTORY_KEY = "personal_rag_history"
-PASSWORD_OK_KEY = "personal_rag_password_ok"
 
 
 def _secret_text(name: str) -> str:
@@ -42,7 +40,7 @@ def _secret_text(name: str) -> str:
 
 
 def _has_profile_secret() -> bool:
-    """PROFILE_DATA의 존재만 확인한다. 실제 원문은 인증 뒤에만 읽는다."""
+    """PROFILE_DATA의 존재만 확인한다. 실제 원문은 인덱싱할 때 읽는다."""
 
     try:
         return "PROFILE_DATA" in st.secrets
@@ -71,30 +69,6 @@ def _shared_embeddings() -> Any:
     """공개 모델 가중치만 worker 안에서 재사용한다. 개인 index는 여기에 저장하지 않는다."""
 
     return build_embeddings()
-
-
-def _password_gate(*, deployment_mode: bool) -> bool:
-    configured_password = _secret_text("SITE_PASSWORD")
-    if deployment_mode and not configured_password:
-        st.title("개인 프로필 RAG")
-        st.error("배포 접근 설정을 확인해 주세요.")
-        return False
-    if not configured_password:
-        return True
-    if st.session_state.get(PASSWORD_OK_KEY):
-        return True
-
-    st.title("개인 프로필 RAG")
-    st.caption("접근 비밀번호가 필요합니다.")
-    with st.form("password_gate", clear_on_submit=True):
-        candidate = st.text_input("비밀번호", type="password")
-        submitted = st.form_submit_button("계속")
-    if submitted:
-        if verify_site_password(candidate, configured_password):
-            st.session_state[PASSWORD_OK_KEY] = True
-            st.rerun()
-        st.error("비밀번호를 확인해 주세요.")
-    return False
 
 
 def _load_profile_documents() -> list:
@@ -153,11 +127,8 @@ def _generate_answer(backend: str, question: str, sources: list, api_key: str) -
 
 
 def main() -> None:
-    st.set_page_config(page_title="개인 프로필 RAG", page_icon="🔒")
+    st.set_page_config(page_title="개인 프로필 RAG", page_icon="👤")
     deployment_mode = _has_profile_secret()
-    if not _password_gate(deployment_mode=deployment_mode):
-        return
-
     api_key = _secret_text("GOOGLE_API_KEY")
     if deployment_mode and not api_key:
         st.title("개인 프로필 RAG")
